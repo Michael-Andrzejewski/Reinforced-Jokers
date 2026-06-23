@@ -16,22 +16,21 @@ That covers any joker whose effect flows through a returned scalable field or th
 - **Probabilistic jokers** work in expected value but with different variance (one scaled roll instead of N independent rolls).
 - **~25 jokers underscale** because they deliver their effect via a non-money side effect.
 
-## Fixed by the money hooks (now correct)
-Mail-In Rebate, Faceless Joker, Delayed Gratification, Trading Card, Matador, To Do List (ease_dollars); Golden Joker, Cloud 9, Rocket, Satellite (calculate_dollar_bonus).
+## Fixed — money
+Mail-In Rebate, Faceless Joker, Delayed Gratification, Trading Card, Matador, To Do List (ease_dollars ×N); Golden Joker, Cloud 9, Rocket, Satellite (calculate_dollar_bonus ×N).
 
-## Still underscaling — side effect runs once (candidates for a per-stack loop)
+## Fixed — side effects run N times (RJ_REPEAT list)
+The whole calculate is re-run N times for these pure side-effect jokers, so the side effect happens once per stack:
+- **Create cards:** Marble, 8 Ball, DNA, Sixth Sense, Superposition, Seance, Riff-raff, Vagabond, Hallucination, Certificate, Cartomancer, Perkeo, Invisible Joker.
+- **Level a hand:** Space Joker, Burnt Joker.
+- **Edit cards:** Hiker (+perma chips ×N per card), Gift Card (sell value ×N), Midas Mask (idempotent).
+- **Tag / hands:** Diet Cola (N tags), Burglar (hands/discards ×N).
 
-**Creates cards (makes 1, should make N):** Marble Joker, 8 Ball, DNA, Sixth Sense, Superposition, Seance, Riff-raff, Vagabond, Hallucination, Certificate, Cartomancer, Perkeo, Invisible Joker.
+## Fixed — slots / hands / discards (merge keeps the passive)
+On merge the absorbed duplicate's add_to_deck passive is kept (not undone on dissolve); the surviving stack undoes it N times when sold. Symmetric with vanilla remove_from_deck: Juggler, Drunkard, Merry Andy, Turtle Bean, Stuntman, To the Moon, Troubadour, Oops! All 6s.
 
-**Levels a poker hand once:** Space Joker, Burnt Joker.
-
-**Edits cards once:** Hiker (+perma chips per card), Gift Card (sell value to others), Midas Mask (gold-ifies — idempotent, stacking adds nothing).
-
-**Destroys jokers (eats 1, should eat N):** Ceremonial Dagger, Madness. (Both also have a scalable scoring half that DOES scale — only the destruction underscales.)
-
-**Slots / hands / discards via add_to_deck (applied once, or applied then removed when the duplicate dissolves):** Burglar, Turtle Bean, To the Moon, Juggler, Drunkard, Troubadour, Merry Andy, Stuntman (hand-size half), Oops! All 6s.
-
-**Tags:** Diet Cola (one Double tag).
+## Still partial — mixed self-scaling + destroy
+**Ceremonial Dagger, Madness.** Their scoring half scales correctly. Their joker-destruction side effect still fires once per blind (not N), because repeating it would also double-count their self-scaling counter. Left as-is intentionally.
 
 ## Approximate (expected value ~right, variance differs)
 Misprint, Business Card, Reserved Parking, Bloodstone, Gros Michel (extinction roll), 8 Ball, Space Joker, Hallucination.

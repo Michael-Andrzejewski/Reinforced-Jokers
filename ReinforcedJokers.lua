@@ -110,12 +110,46 @@ function ease_dollars(amount, ...)
     return rj_orig_ease_dollars(amount, ...)
 end
 
+-- Pure side-effect Jokers whose effect is NOT a returned scalable field
+-- (they create/destroy/level/edit cards, change hands, drop a tag, etc.).
+-- For these we re-run the whole calculate N times so the side effect
+-- happens N times. They have no scalable scoring return, so there is
+-- nothing to double-count. (Self-scaling and mixed Jokers are NOT here.)
+local RJ_REPEAT = {
+    -- create cards
+    j_marble = true, j_8_ball = true, j_dna = true, j_sixth_sense = true,
+    j_superposition = true, j_seance = true, j_riff_raff = true,
+    j_vagabond = true, j_hallucination = true, j_certificate = true,
+    j_cartomancer = true, j_perkeo = true, j_invisible = true,
+    -- level a hand
+    j_space = true, j_burnt = true,
+    -- edit cards
+    j_hiker = true, j_gift = true, j_midas_mask = true,
+    -- tag / hands
+    j_diet_cola = true, j_burglar = true,
+}
+
 -- Card:calculate_joker returns the Joker's effect table (o) plus an
--- optional trigger flag (t). We scale o by the stack and pass t through,
--- and expose the stack to ease_dollars for the duration of the call.
+-- optional trigger flag (t). For RJ_REPEAT Jokers we re-run N times;
+-- otherwise we scale the returned effect by the stack and expose the
+-- stack to ease_dollars for the duration of the call.
 local rj_orig_calc_joker = Card.calculate_joker
 function Card:calculate_joker(context)
     local n = (rj_enabled() and rj_stack_of(self)) or 1
+    local key = self.config and self.config.center_key
+
+    if n > 1 and key and RJ_REPEAT[key] then
+        local first_o, first_t
+        for i = 1, n do
+            local prev = rj_current_stack
+            rj_current_stack = 1 -- side effects already repeat; don't also scale
+            local o, t = rj_orig_calc_joker(self, context)
+            rj_current_stack = prev
+            if i == 1 then first_o, first_t = o, t end
+        end
+        return first_o, first_t
+    end
+
     local prev = rj_current_stack
     rj_current_stack = n
     local o, t = rj_orig_calc_joker(self, context)
@@ -168,7 +202,12 @@ local function rj_try_merge(card)
     if target.juice_up then target:juice_up(0.5, 0.5) end
 
     -- Remove the incoming duplicate (animated, like a destroyed Joker).
+    -- rj_absorbed tells remove_from_deck NOT to undo this card's passive
+    -- (hand size, discards, interest, etc.) -- it stays applied so the
+    -- stack keeps N copies' worth. remove_from_deck undoes it N times
+    -- when the surviving stack is eventually sold.
     card.getting_sliced = true
+    card.rj_absorbed = true
     pcall(function() card:start_dissolve() end)
 end
 
@@ -191,6 +230,30 @@ function Card:add_to_deck(from_debuff)
         }))
     end
     return res
+end
+
+-- Balance the passive (hand size / discards / interest / etc.) for stacks.
+-- Each copy applied its passive once via add_to_deck. An absorbed
+-- duplicate keeps its passive (we skip its removal); the surviving stack
+-- of N undoes the passive N times when it leaves play (sold/destroyed).
+local rj_orig_remove_from_deck = Card.remove_from_deck
+function Card:remove_from_deck(from_debuff)
+    if self.rj_absorbed then
+        -- This duplicate was merged; its passive now belongs to the stack.
+        self.added_to_deck = false
+        return
+    end
+    if rj_enabled() and self.ability and self.ability.set == 'Joker' then
+        local n = rj_stack_of(self)
+        if n > 1 then
+            for _ = 1, n do
+                self.added_to_deck = true
+                rj_orig_remove_from_deck(self, from_debuff)
+            end
+            return
+        end
+    end
+    return rj_orig_remove_from_deck(self, from_debuff)
 end
 
 ----------------------------------------------------------------------
