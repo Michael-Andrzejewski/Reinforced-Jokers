@@ -106,9 +106,11 @@ end
 -- 2b. Combine on pickup
 ----------------------------------------------------------------------
 
--- Find an existing Joker of the same type to fold a duplicate into.
-local function rj_find_target(card)
-    if not (G.jokers and G.jokers.cards and card.config) then return nil end
+-- Find an owned Joker of the same type as `card` (excluding `card`
+-- itself). Used both to fold a freshly bought duplicate into an existing
+-- copy and to detect, in the shop, that a Joker would reinforce.
+local function rj_find_match(card)
+    if not (G.jokers and G.jokers.cards and card and card.config) then return nil end
     local key = card.config.center_key
     if not key then return nil end
     for _, j in ipairs(G.jokers.cards) do
@@ -124,7 +126,7 @@ local function rj_try_merge(card)
     if not rj_enabled() or not rj_cfg().combine_and_stack then return end
     if not (card and card.ability and card.ability.set == 'Joker') then return end
     if card.getting_sliced then return end
-    local target = rj_find_target(card)
+    local target = rj_find_match(card)
     if not target then return end
 
     target.ability.rj_stack = rj_stack_of(target) + rj_stack_of(card)
@@ -154,6 +156,52 @@ function Card:add_to_deck(from_debuff)
         }))
     end
     return res
+end
+
+----------------------------------------------------------------------
+-- 2c. Shop: let a reinforcing duplicate be bought with full slots, and
+--     relabel its buy button
+----------------------------------------------------------------------
+
+-- A Joker you already own can always be bought, even at full slots,
+-- because it folds into the existing copy instead of taking a slot.
+local rj_orig_check_space = G.FUNCS.check_for_buy_space
+G.FUNCS.check_for_buy_space = function(card)
+    if rj_enabled() and rj_cfg().combine_and_stack
+       and card and card.ability and card.ability.set == 'Joker'
+       and rj_find_match(card) then
+        return true
+    end
+    return rj_orig_check_space(card)
+end
+
+-- Swap a buy button's text. The text node is the button root's first
+-- child; clearing text_drawable forces it to rebuild on the next update.
+local function rj_set_buy_label(e, label, scale)
+    local t = e.children and e.children[1]
+    if t and t.config and t.config.text ~= label then
+        t.config.text = label
+        if scale then t.config.scale = scale end
+        t.config.text_drawable = nil
+        if t.UIBox then t.UIBox:recalculate() end
+    end
+end
+
+-- can_buy runs on the buy button every frame. After the stock cost
+-- check, relabel to "Reinforce" when the card would fold into an owned
+-- Joker, and restore "Buy" otherwise.
+local rj_orig_can_buy = G.FUNCS.can_buy
+G.FUNCS.can_buy = function(e)
+    rj_orig_can_buy(e)
+    if not (rj_enabled() and rj_cfg().combine_and_stack) then return end
+    local card = e.config and e.config.ref_table
+    local reinforcing = card and card.ability and card.ability.set == 'Joker'
+                        and rj_find_match(card)
+    if reinforcing then
+        rj_set_buy_label(e, 'Reinforce', 0.38)
+    else
+        rj_set_buy_label(e, localize('b_buy'), 0.5)
+    end
 end
 
 ----------------------------------------------------------------------
