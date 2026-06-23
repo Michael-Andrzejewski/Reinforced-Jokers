@@ -95,15 +95,32 @@ local function rj_scale_effect(ret, n)
     return ret
 end
 
+-- Some Jokers apply money as a SIDE EFFECT (ease_dollars) inside their
+-- calculate and return only a message, so scaling the return does
+-- nothing (e.g. Mail-In Rebate). We track the stack of the Joker that is
+-- currently calculating and scale any ease_dollars it triggers. The
+-- save/restore makes this correct under nesting (e.g. Blueprint).
+local rj_current_stack = 1
+
+local rj_orig_ease_dollars = ease_dollars
+function ease_dollars(amount, ...)
+    if rj_enabled() and rj_current_stack > 1 and type(amount) == 'number' then
+        amount = amount * rj_current_stack
+    end
+    return rj_orig_ease_dollars(amount, ...)
+end
+
 -- Card:calculate_joker returns the Joker's effect table (o) plus an
--- optional trigger flag (t). We scale o by the stack and pass t through.
+-- optional trigger flag (t). We scale o by the stack and pass t through,
+-- and expose the stack to ease_dollars for the duration of the call.
 local rj_orig_calc_joker = Card.calculate_joker
 function Card:calculate_joker(context)
+    local n = (rj_enabled() and rj_stack_of(self)) or 1
+    local prev = rj_current_stack
+    rj_current_stack = n
     local o, t = rj_orig_calc_joker(self, context)
-    if rj_enabled() and type(o) == 'table' then
-        local n = rj_stack_of(self)
-        if n > 1 then rj_scale_effect(o, n) end
-    end
+    rj_current_stack = prev
+    if n > 1 and type(o) == 'table' then rj_scale_effect(o, n) end
     return o, t
 end
 
