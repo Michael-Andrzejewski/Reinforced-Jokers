@@ -1,5 +1,5 @@
 --[[
-  Reinforced Jokers
+  Stacking Jokers
   Author: Soareverix  (commissioned by Bean)
 
   Two linked behaviours, both on by default:

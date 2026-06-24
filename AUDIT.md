@@ -1,4 +1,4 @@
-# Reinforced Jokers — full joker audit
+# Stacking Jokers — full joker audit
 
 Goal: a stacked joker (count N) should behave exactly like N separate copies.
 
